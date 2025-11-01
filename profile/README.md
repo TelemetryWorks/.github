@@ -1,26 +1,26 @@
 ![TelemetryWorks Banner](https://raw.githubusercontent.com/TelemetryWorks/.github/main/images/TelemetryWorks.png)
 
 # ⚡TelemetryWorks  
-
-**Flight meets code. Data meets truth.**
-
+  
+**Flight meets code. Data meets truth.**  
+  
 We build ruthless, high-performance telemetry tooling.  
   
 IRIG-106. Ch10. PCM. Bus traffic. Sensor fusion. Edge compute.  
 Rust first. Zero-copy. Deterministic. Crashproof.  
 Because packets don’t care how you feel — only that you got them right.  
-
-**Telemetry is a battlefield.**
-**We ship tools built for it.**
-
-## 🜂 What We Believe
-
+  
+**Telemetry is a battlefield.**  
+**We ship tools built for it.**  
+  
+## 🜂 What We Believe  
+  
 We aren't here to reinvent telemetry.  
-We’re here to **drag it into the future.**
-
-> **Open source doesn’t mean hobby.**
-> **It means we win together.**
-
+We’re here to **drag it into the future.**  
+  
+> **Open source doesn’t mean hobby.**  
+> **It means we win together.**  
+  
 * Real engineers. Real aircraft. Real missions.  
 * Observability at Mach.  
 * Verified timing or it didn’t happen.  
