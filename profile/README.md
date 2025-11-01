@@ -13,8 +13,6 @@ Because packets don’t care how you feel — only that you got them right.
 **Telemetry is a battlefield.**
 **We ship tools built for it.**
 
----
-
 ## 🜂 What We Believe
 
 We aren't here to reinvent telemetry.  
@@ -33,8 +31,6 @@ We’re here to **drag it into the future.**
 We're not here to “disrupt.  
 We’re here to **engineer like it matters** — because it does.  
 
----
-
 ## Goals
 
 - ✅ Safe, modern, Rust-native telemetry stack  
@@ -42,8 +38,6 @@ We’re here to **engineer like it matters** — because it does.
 - ✅ Robust error handling (never crash on malformed data)
 - ✅ Real-time & offline processing  
 - ✅ Test-driven, spec-accurate decoders 
-
----
 
 ## 🧰 The Stack
 **Rust crates, shaped like systems:**
@@ -58,8 +52,6 @@ irig106_ch10_index      # time-seek, random access, maps
 If it runs on a range, test bench, or captured bus…  
 we’ll make it readable, live, streamable, and weapon-grade reliable.  
 
----
-
 ## Philosophy  
 
 - ✅ Production-ready  
@@ -69,8 +61,6 @@ we’ll make it readable, live, streamable, and weapon-grade reliable.
 - ✅ Aerospace-grade reliability  
   
 > Telemetry built for engineers who fly fast and test harder.
-
----
 
 ## 🏁 Who This Is For  
 
@@ -85,8 +75,6 @@ If your life has ever been ruined by timing drift, packet loss,
 or someone who “forgot to label the channel”…  
 you’re one of us.  
 
----
-
 ## 🧪 Lab Culture  
 
 * Break things in testing so they **never break in flight**  
@@ -95,8 +83,6 @@ you’re one of us.
 * Binary tools deserve beauty, too  
 * Logs like poetry. Docs like truth serum.  
 * **Telemetry is sacred**
-
----
 
 ## ⚙️ Contribute
 
@@ -108,6 +94,3 @@ Show us you can out-engineer the problem.
 
 If you don’t like rules, don’t worry:  
 **physics enforces most of them for us.**  
-
----
-
