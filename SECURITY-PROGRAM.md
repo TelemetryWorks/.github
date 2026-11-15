@@ -18,8 +18,10 @@ Those control and CodeQL statements remain owner-reported, rather than an
 independent audit, a record of successful scans, or a claim of zero findings.
 Repository names were obtained from the public organization repository listing
 on 2026-11-15. The follow-up inventory below reads live GitHub protection and
-merge settings and public crates.io metadata on 2026-11-15; other repository
-source contents were not inspected. Links are live endpoints and may change.
+merge settings and public crates.io metadata on 2026-11-15. The revision also
+checks main-branch workflow paths in the seven zero-check repositories, and
+workflow paths, release instructions, PR #15 and release attempt logs in
+`irig106-types`. Links to live endpoints may change.
 TODO: archive owner-approved settings snapshots and scan evidence.
 
 Policy requirements below do not establish implementation in any repository.
@@ -39,6 +41,26 @@ the bootstrap token, configure the Trusted Publisher, and enable
 Trusted-Publishing-only mode before any subsequent upload. This exception
 does not permit token-based updates to an existing crate.
 
+### Publishing workflow standard and pending migration
+
+Owner decision 2026-11-15: every publishing workflow must use the path
+`.github/workflows/trusted-publishing.yml`. Registry Trusted Publishers must
+point at the filename `trusted-publishing.yml`; publishing environments are
+`crates-io` for crates.io and `pypi` for PyPI. This is the owner standard,
+not a claim that every repository has migrated.
+
+Current `irig106-types` main has only `ci.yml` and `release.yml` in
+[`.github/workflows`](https://github.com/TelemetryWorks/irig106-types/tree/1eea6ea97f739d429f86529e22aef8b376aec450/.github/workflows).
+Publishing still uses `.github/workflows/release.yml`; that workflow published
+0.1.0. The owner tracks the pending rename in [types PR #15](https://github.com/TelemetryWorks/irig106-types/pull/15).
+The rename is not yet on main, and the inspected PR diff still uses
+`release.yml`. **Before the next tag**, the owner must coordinate the workflow
+rename and update the crates.io Trusted Publisher to `trusted-publishing.yml`.
+With `trustpub_only=true`, a stale publisher filename blocks the release;
+a fallback publishing token is not a remedy.
+
+### Verified release and attempt history
+
 Verified release evidence: [crates.io version metadata](https://crates.io/api/v1/crates/irig106-types/0.1.0)
 for `irig106-types` 0.1.0 records `trustpub_data.provider=github`, repository
 `TelemetryWorks/irig106-types`, run [`43727921675`](https://github.com/TelemetryWorks/irig106-types/actions/runs/43727921675),
@@ -46,6 +68,23 @@ and SHA `3c517358694646652939c236968b202ebf76e28a` (`3c51735`).
 [Crate metadata](https://crates.io/api/v1/crates/irig106-types) records
 `trustpub_only=true` at inspection. This establishes Trusted Publishing for
 that version and the current only-mode setting, not every crate or release.
+The run's currently displayed conclusion is **failure** (attempt 3), which must
+not be confused with the successful publishing attempt. All times below are
+UTC on 2026-11-15; each attempt used `.github/workflows/release.yml` at the
+SHA above.
+
+| Attempt | Started | Result and evidence |
+| --- | --- | --- |
+| [1](https://github.com/TelemetryWorks/irig106-types/actions/runs/43727921675/attempts/1) | 15:05:33 | Failed safely before the crates.io Trusted Publisher existed: the authentication step reported no Trusted Publishing configuration for the repository; no upload occurred. |
+| [2 — publishing attempt](https://github.com/TelemetryWorks/irig106-types/actions/runs/43727921675/attempts/2) | 15:20:29 | Succeeded; logs record publication of 0.1.0. Crates.io records creation at 15:21:39Z (15:21:39.926580Z). |
+| [3](https://github.com/TelemetryWorks/irig106-types/actions/runs/43727921675/attempts/3) | 15:29:13 | Later rerun after the successful upload; failed safely with `crate irig106-types@0.1.0 already exists` on the crates.io index. It did not publish a replacement. |
+
+**Lesson:** never rerun a release workflow after a successful upload. Check
+crates.io first, including when a workflow reports failure: the upload may
+already have completed. The existing [RELEASING instructions](https://github.com/TelemetryWorks/irig106-types/blob/1eea6ea97f739d429f86529e22aef8b376aec450/docs/RELEASING.md#package-contents-and-failures)
+already direct maintainers to inspect crates.io before treating an
+existing-version error as retryable, and prohibit overwriting a version.
+
 TODO: per-crate publisher configuration and any bootstrap completion evidence
 without secrets; other crates remain unverified here.
 
@@ -63,8 +102,11 @@ is `["merge"]`). Each has an always-on administrator bypass
 these rules. Required checks are configured on nine of
 those rulesets. The seven with **no required checks** are `.github`,
 `irig106-cli`, `irig106-core`, `irig106-decode`, `irig106-index`,
-`irig106-write` and `irig106-validator`; the owner reports no CI yet in these
-repositories. No required-check gate is enforced there.
+`irig106-write` and `irig106-validator`. Main-branch tree inspection confirms
+that all seven lack a `.github/workflows` directory: **no CI yet** means no
+repository-defined GitHub Actions workflows on main in this inventory; it
+does not rule out external checks. Per-repository tree evidence is linked
+below. No required-check gate is enforced there.
 
 `spatial-typestate` uses [classic main branch protection](https://api.github.com/repos/TelemetryWorks/spatial-typestate/branches/main/protection):
 PRs and 27 status checks are required, force pushes/deletion are disabled,
@@ -109,16 +151,16 @@ artifact applicability must first be established for each repository.
 
 | Repository | Other GitHub controls | CodeQL configuration (owner-reported) | Main protection (live evidence) | Trusted Publishing | Provenance / SBOMs | Scorecard / Best Practices badge |
 | --- | --- | --- | --- | --- | --- | --- |
-| `.github` | Enabled | Default setup configured; no analysable languages; nothing analyzed | [Active ruleset](https://api.github.com/repos/TelemetryWorks/.github/rulesets/27327754); 0 required checks (no CI yet, owner-reported) | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `.github` | Enabled | Default setup configured; no analysable languages; nothing analyzed | [Active ruleset](https://api.github.com/repos/TelemetryWorks/.github/rulesets/27327754); 0 required checks ([no CI yet](https://api.github.com/repos/TelemetryWorks/.github/git/trees/592197d8330fce45564067f031184132a5e9433d?recursive=1)) | Policy / TODO (if publishing crates) | Planned* | Planned |
 | `spatial-typestate` | Enabled | Advanced `codeql.yml` | [Classic protection](https://api.github.com/repos/TelemetryWorks/spatial-typestate/branches/main/protection); 27 checks; squash/rebase allowed | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-validator` | Enabled | Default setup configured; no analysable languages; nothing analyzed | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-validator/rulesets/27327825); 0 required checks (no CI yet, owner-reported) | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-types` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-types/rulesets/27327820); 6 required checks | [0.1.0 via Trusted Publishing](https://crates.io/api/v1/crates/irig106-types/0.1.0); `trustpub_only=true` | Planned* | Planned |
-| `irig106-core` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-core/rulesets/27327774); 0 required checks (no CI yet, owner-reported) | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-validator` | Enabled | Default setup configured; no analysable languages; nothing analyzed | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-validator/rulesets/27327825); 0 required checks ([no CI yet](https://api.github.com/repos/TelemetryWorks/irig106-validator/git/trees/031024e2e3715459c508fed7ac2537ecd651ece3?recursive=1)) | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-types` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-types/rulesets/27327820); 6 required checks | [0.1.0 via Trusted Publishing](https://crates.io/api/v1/crates/irig106-types/0.1.0) via `release.yml` (attempt 2); `trustpub_only=true`; standard filename migration pending | Planned* | Planned |
+| `irig106-core` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-core/rulesets/27327774); 0 required checks ([no CI yet](https://api.github.com/repos/TelemetryWorks/irig106-core/git/trees/38ac0700d40152d96642cb11176f2e0cdd347c53?recursive=1)) | Policy / TODO (if publishing crates) | Planned* | Planned |
 | `irig106-time` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-time/rulesets/27327804); 12 required checks | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-decode` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-decode/rulesets/27327779); 0 required checks (no CI yet, owner-reported) | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-write` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-write/rulesets/27327827); 0 required checks (no CI yet, owner-reported) | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-cli` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-cli/rulesets/27327769); 0 required checks (no CI yet, owner-reported) | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-index` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-index/rulesets/27327791); 0 required checks (no CI yet, owner-reported) | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-decode` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-decode/rulesets/27327779); 0 required checks ([no CI yet](https://api.github.com/repos/TelemetryWorks/irig106-decode/git/trees/3afa7a4750eae0f513688c3fc0e71ade8df42b6a?recursive=1)) | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-write` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-write/rulesets/27327827); 0 required checks ([no CI yet](https://api.github.com/repos/TelemetryWorks/irig106-write/git/trees/fb535f828dfb6e94d39428976ef8895535a7e075?recursive=1)) | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-cli` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-cli/rulesets/27327769); 0 required checks ([no CI yet](https://api.github.com/repos/TelemetryWorks/irig106-cli/git/trees/3dbd4eecc0cddb28b1ee8fe39a552562f81fddbe?recursive=1)) | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-index` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-index/rulesets/27327791); 0 required checks ([no CI yet](https://api.github.com/repos/TelemetryWorks/irig106-index/git/trees/b7c0fc9d32261c75da6e216c9229ae06a8a5cfcd?recursive=1)) | Policy / TODO (if publishing crates) | Planned* | Planned |
 | `irig106-docs` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-docs/rulesets/27327785); 2 required checks | Policy / TODO (if publishing crates) | Planned* | Planned |
 | `irig106-studio` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-studio/rulesets/27327796); 3 required checks | Policy / TODO (if publishing crates) | Planned* | Planned |
 | `irig106-ch10-reader` | Enabled | Default setup configured with languages | [Active ruleset](https://api.github.com/repos/TelemetryWorks/irig106-ch10-reader/rulesets/27327759); 2 required checks | Policy / TODO (if publishing crates) | Planned* | Planned |
