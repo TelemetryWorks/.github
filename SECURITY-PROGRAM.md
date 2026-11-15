@@ -9,7 +9,11 @@ for evidence still needed for offline deployment claims.
 
 The owner assignment of 2026-11-15 reports GitHub secret scanning, push
 protection, Dependabot alerts and security updates, private vulnerability
-reporting, and CodeQL enabled on all 17 public repositories on that date.
+reporting enabled on all 17 public repositories on that date. The owner’s
+review correction records CodeQL default setup configured with languages on
+13 repositories, advanced `codeql.yml` on `jseries` and `spatial-typestate`,
+and default setup configured with no analysable languages on `.github` and
+`irig106-validator` (nothing analyzed in those two repositories).
 This inventory records that owner-supplied fact; it is not an independent
 settings audit, a record of successful scans, or a claim of zero findings.
 Repository names were obtained from the public organization repository listing
@@ -26,11 +30,13 @@ Owner policy dated 2026-11-13: crates.io releases must use Trusted Publishing
 from GitHub Actions. Enable crates.io Trusted-Publishing-only mode for each
 published crate; do not retain a reusable publishing token as an alternative.
 
-The sole bootstrap exception is a one-time, crate-scoped API token for a
-brand-new crate's first upload. After that upload, revoke the bootstrap token,
-configure the trusted publisher, and enable Trusted-Publishing-only mode before
-any subsequent upload. This exception does not permit token-based updates to
-an existing crate. TODO: record per-crate publisher configuration,
+Owner decision 2026-11-15: **One-time token bootstrap** is the sole exception
+to the 2026-11-13 policy, for a brand-new crate's first upload only. Use a
+crate-scoped `publish-new` token with a 1-day expiry. After that upload, revoke
+the bootstrap token, configure the Trusted Publisher, and enable
+Trusted-Publishing-only mode before any subsequent upload. This exception
+does not permit token-based updates to an existing crate. TODO: record
+per-crate publisher configuration,
 Trusted-Publishing-only mode, and bootstrap completion evidence without secrets.
 
 ## Main branch policy
@@ -48,7 +54,7 @@ this document does not assert that those settings were audited or changed.
 | GitHub secret scanning and push protection | Enabled on all 17 public repositories, owner-reported | TODO: dated settings evidence and alert handling records |
 | Dependabot alerts and security updates | Enabled on all 17 public repositories, owner-reported | TODO: settings evidence; applicability depends on supported dependency manifests |
 | Private vulnerability reporting | Enabled on all 17 public repositories, owner-reported | [Reporting procedure](SECURITY.md#reporting-a-vulnerability); TODO: settings evidence |
-| CodeQL | Enabled on all 17 public repositories, owner-reported | TODO: supported-language coverage, successful analysis runs and triage evidence; enablement alone does not establish coverage |
+| CodeQL | Owner-reported: default setup configured with languages on 13; advanced `codeql.yml` on 2; default setup configured with no analysable languages on 2 (nothing analyzed) | See per-repository status below; TODO: language lists, successful analysis runs and triage evidence; configuration alone does not establish coverage |
 | Main rulesets and merge commits | Required policy | TODO: per-repository enforcement evidence |
 | Trusted Publishing and Trusted-Publishing-only mode | Required publishing policy, with first-upload exception above | TODO: per-crate implementation evidence; no claim that every crate is configured |
 | SLSA build provenance via GitHub artifact attestations | Planned for released binaries | TODO: workflows, release-bound attestations and verification results; no SLSA level claimed |
@@ -58,33 +64,35 @@ this document does not assert that those settings were audited or changed.
 
 ## Per-repository status
 
-**Enabled** means the five GitHub control groups in the inventory above are
-owner-reported enabled: secret scanning/push protection, Dependabot alerts,
-Dependabot security updates, private vulnerability reporting, and CodeQL.
-It does not mean a scan ran or found nothing. **Policy / TODO** means required
+**Enabled** in the other GitHub controls column means owner-reported
+secret scanning/push protection, Dependabot alerts, Dependabot security updates
+and private vulnerability reporting. CodeQL is recorded separately per repository:
+configuration does not establish a successful scan or absence of findings.
+The language names and successful analysis evidence remain TODO.
+**Policy / TODO** means required
 where applicable, with per-repository or per-crate evidence still to collect.
 **Planned*** means provenance and SBOMs are planned for released binaries;
 artifact applicability must first be established for each repository.
 
-| Repository | GitHub controls | Main rulesets | Trusted Publishing | Provenance / SBOMs | Scorecard / Best Practices badge |
-| --- | --- | --- | --- | --- | --- |
-| `.github` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `spatial-typestate` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-validator` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-types` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-core` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-time` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-decode` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-write` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-cli` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-index` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-docs` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-studio` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-ch10-reader` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `irig106-tmats` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `pelorus` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `jseries` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
-| `rcc-106-standards` | Enabled | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| Repository | Other GitHub controls | CodeQL configuration (owner-reported) | Main rulesets | Trusted Publishing | Provenance / SBOMs | Scorecard / Best Practices badge |
+| --- | --- | --- | --- | --- | --- | --- |
+| `.github` | Enabled | Default setup configured; no analysable languages; nothing analyzed | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `spatial-typestate` | Enabled | Advanced `codeql.yml` | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-validator` | Enabled | Default setup configured; no analysable languages; nothing analyzed | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-types` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-core` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-time` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-decode` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-write` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-cli` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-index` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-docs` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-studio` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-ch10-reader` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `irig106-tmats` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `pelorus` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `jseries` | Enabled | Advanced `codeql.yml` | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
+| `rcc-106-standards` | Enabled | Default setup configured with languages | Policy / TODO | Policy / TODO (if publishing crates) | Planned* | Planned |
 
 ## Release evidence and offline use
 

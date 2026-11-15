@@ -68,7 +68,7 @@ IRIG 106 crates (`irig106-*`) they are:
 | Minimum test coverage | planned |
 | Fuzzing of parsers | planned for the rebuilt libraries (`irig106-time` has fuzz harnesses from its prototype, not yet run in CI) |
 | Software bill of materials and build-provenance attestation for released binaries | planned, with the first releases of binaries |
-| Publishing to crates.io from GitHub Actions via Trusted Publishing | required by owner policy 2026-11-13; one-time crate-scoped token bootstrap only for a brand-new crate’s first upload, then Trusted-Publishing-only mode; per-crate evidence pending — see [security program](SECURITY-PROGRAM.md#publishing-policy) |
+| Publishing to crates.io from GitHub Actions via Trusted Publishing | required by owner policy 2026-11-13; owner decision 2026-11-15 allows One-time token bootstrap for a brand-new crate’s first upload only: crate-scoped `publish-new` token, 1-day expiry, revoke, then Trusted Publisher + Trusted-Publishing-only mode; per-crate evidence pending — see [security program](SECURITY-PROGRAM.md#publishing-policy) |
 
 Released binaries will be verifiable with
 `gh attestation verify <file> --owner TelemetryWorks` once attestations are
