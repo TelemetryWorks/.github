@@ -429,8 +429,8 @@ its token-based route. Its continued presence is not an approved alternative.
 
 ## Repositories that also ship binaries
 
-Every repository shipping binaries uses the binary variant, including a
-binary-only GitHub release such as `irig106-ch10-reader`. This follows the
+Every active repository shipping binaries uses the binary variant, including
+binary-only GitHub releases. This follows the
 Rust Commons reusable-builder boundary: the build must attest its **own output**,
 not a caller-selected artifact. It is a design requirement toward stronger
 SLSA assurance, not a declaration that TelemetryWorks has achieved Build L3.
@@ -516,6 +516,10 @@ already implemented or that a real release has run.
 **Not applicable (publishes nothing)** means no software package/binary release
 in scope now, not permanent exemption from future releases.
 
+**Owner decision 2026-11-22:** `irig106-ch10-reader` is archived, superseded
+by `irig106-core` and the future `irig106 inspect`. Its existing GitHub releases
+v0.1.0-v0.1.2 are retained; no release-pipeline adoption is planned for it.
+
 | Repository | crates.io / `crate.trustpub_only` (`only`) | PyPI | Current workflows | Adoption |
 | --- | --- | --- | --- | --- |
 | [.github](https://github.com/TelemetryWorks/.github/tree/686469bc668502637723dd13259cf5b9313bb7f0) | — | — | — | **Not applicable (publishes nothing)** |
@@ -530,7 +534,7 @@ in scope now, not permanent exemption from future releases.
 | [irig106-index](https://github.com/TelemetryWorks/irig106-index/tree/b7c0fc9d32261c75da6e216c9229ae06a8a5cfcd) | `irig106-index` 0.0.1 placeholder; only=true | None found | — | **Adopt before first real release** |
 | [irig106-docs](https://github.com/TelemetryWorks/irig106-docs/tree/76acb7b4545b3cecc4bd31de634ec740e7639807) | No crate | None found | `book.yml` | **Not applicable (publishes nothing)** |
 | [irig106-studio](https://github.com/TelemetryWorks/irig106-studio/tree/3d1a5789b19f413dbf53952a2a120afa8f7891f7) | `irig106-studio`, `irig106-studio-core`, `irig106-studio-wasm` unpublished; only=N/A | None found | `ci.yml`, `scorecard.yml`, `zizmor.yml` | **Adopt before first real release** |
-| [irig106-ch10-reader](https://github.com/TelemetryWorks/irig106-ch10-reader/tree/2fdc4773ff304169e2942a4e9934e30f32e93dd7) | Crate unpublished; only=N/A. Ships GitHub Windows binary archives through v0.1.2; binary variant required | None found | `windows-ci.yml` | **Pending adoption PR**; binary variant |
+| [irig106-ch10-reader](https://github.com/TelemetryWorks/irig106-ch10-reader/tree/2fdc4773ff304169e2942a4e9934e30f32e93dd7) | Crate unpublished; only=N/A. Historical GitHub Windows binary archives retained | None found | `windows-ci.yml` (historical) | **Archived — not applicable (GitHub releases v0.1.0-v0.1.2 retained)**; [adoption PR #5](https://github.com/TelemetryWorks/irig106-ch10-reader/pull/5) closed unmerged |
 | [irig106-tmats](https://github.com/TelemetryWorks/irig106-tmats/tree/3197c685b0b419b2144f4a9dce936ddcfd2c63c5) | `irig106-tmats` 0.0.1/0.0.2 placeholders; only=true. `irig106-tmats-cli` unpublished; only=N/A | None found | `ci.yml`, `scorecard.yml`, `zizmor.yml` | **Adopt before first real release**; family 12 preparation |
 | [pelorus](https://github.com/TelemetryWorks/pelorus/tree/810f772e3a9e0b3e70123435516eeeb7bb8d62b2) | No TelemetryWorks crate: manifest name `server` and registry name `pelorus` point to unrelated projects; only=N/A for this repo | No TelemetryWorks package; same-name PyPI project is unrelated | `ci.yml`, `scorecard.yml`, `zizmor.yml` | **Adopt before first real release**; before distributing the server |
 | [jseries](https://github.com/TelemetryWorks/jseries/tree/35f2aaac9098224366303bf3089b74677597945f) | `jseries-core`, `jseries-schema`, `jseries-cli`, `jseries-python` unpublished and workspace publish=false; only=N/A | `jseries` package source exists; unpublished | `ci.yml`, `codeql.yml`, `performance.yml`, `python.yml`, `scorecard.yml`, `sonarcloud.yml`, `zizmor.yml` | **Adopt before first real release**; before enabling any crate/Python upload |
