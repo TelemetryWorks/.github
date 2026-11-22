@@ -5,8 +5,8 @@ The owner approved this standard on 2026-11-22.
 This adopts the structure of the [Rust Commons release-pipeline standard](https://github.com/rustcommons/.github/blob/6eb3d80401382ee197e58844f6008d53e406efe6/docs/TRUSTED-PUBLISHING.md)
 for TelemetryWorks. It implements the direction of
 [SECURITY-PROGRAM.md#publishing-policy](../SECURITY-PROGRAM.md#publishing-policy);
-it records a standard and rollout state, not completed adoption or permission
-to release. The security program's dated snapshots remain historical evidence.
+it records requirements and evidenced rollout state, not permission to release.
+The security program's dated snapshots remain historical evidence.
 
 Publishing uses `.github/workflows/trusted-publishing.yml`, with workflow
 `name: Trusted publishing`. Register the repository, **filename**
@@ -34,7 +34,8 @@ The PyPI variant below defines its own job ids, dependencies and permissions.
 Dependencies are fixed: `build` needs `gate`; `attest` needs `[gate, build]`;
 `publish` needs `[gate, build, attest]`; `github-release` needs `[gate, publish]`;
 `verify` needs `[gate, github-release]`. Jobs 3–6 require
-`needs.gate.outputs.publish == 'true'`. Keep `gate` directly in each dependent
+`needs.gate.outputs.publish == 'true'` **and** the independent tag-push guard
+below in each job's own `if`. Keep `gate` directly in each dependent
 job's `needs`, since outputs are visible only through direct dependencies.
 The Python and binary variants below explicitly describe their extensions.
 
@@ -43,6 +44,10 @@ The Python and binary variants below explicitly describe their extensions.
 Before a tag run builds anything, require all of the following:
 
 - An **annotated** `v*` tag whose name is exactly `v` plus the release version.
+  Check the remote API `GET /repos/{owner}/{repo}/git/ref/tags/{tag}`: its
+  `object.type` must be `tag`, not `commit`. Peel the annotated tag through
+  the Git tag-object API and compare the final commit with `github.sha`.
+  A local `git cat-file` check alone is insufficient evidence of remote annotation.
 - The tagged commit is reachable from `main` and has successful CI for that
   exact commit. Require the intended CI workflow, not an unrelated green run.
 - Include every workspace crate at the release version in the ordered release
@@ -65,8 +70,9 @@ an exact, pinned `cargo-cyclonedx` version installed using `--locked`.
 Record the exact Rust toolchain as the `build` output `rust-version`; both
 publish and publish-path checks must install and check that same version,
 not resolve a newer stable after an approval delay. Create `SHA256SUMS`
-covering each `.crate` and the SBOM. Upload one logical release artifact named
-`release-<version>` containing those files.
+covering each `.crate` and the SBOM. Upload the immutable payload artifact
+`release-<version>` containing those files. In the base variant, later signing
+adds a separate immutable sidecar, not a replacement payload.
 
 All additional qualification, package audits and candidate-install tests
 belong here and must also execute on the PR dry run. The Python variant builds
@@ -78,7 +84,29 @@ The binary variant uses a reusable builder as described below.
 Validate `SHA256SUMS` before signing. Produce GitHub artifact attestations
 using Sigstore and SLSA build provenance for every `.crate` and the SBOM,
 and for additional release files in the applicable variant. Retain the signed
-bundle as `<repo>-<version>.crates.intoto.jsonl` with the release artifact.
+bundle as `<repo>-<version>.crates.intoto.jsonl` in a **separate immutable
+artifact** named `release-<version>-attestations`. GitHub artifacts are
+immutable: **NEVER use `overwrite: true` on `release-<version>`** to add the
+bundle or re-upload a modified payload.
+
+In the base variant, downstream `publish`, `github-release` and `verify`
+download both artifacts into one logical bundle with `pattern` plus
+`merge-multiple: true`, for example these download-action inputs:
+
+```yaml
+with:
+  pattern: release-${{ needs.gate.outputs.version }}*
+  merge-multiple: true
+  path: release-bundle
+```
+
+Require exactly the payload and sidecar names for this run/version, with no
+colliding filenames. Recheck payload `SHA256SUMS` and verify the sidecar's
+signatures; the bundle is made after payload checksums and is not added to
+that immutable checksum manifest. `verify` additionally checks the actual
+published release files. Python and binary variants sign inside their
+reusable builder and emit the completed bundle there; they do not use this
+base variant's later `attest` upload.
 Later jobs consume this frozen evidence; they must not substitute other bytes.
 A provenance statement alone does not establish a SLSA level.
 
@@ -116,6 +144,14 @@ title. Attach the `.crate` files, SBOM, `SHA256SUMS` and provenance bundle
 though the Praevis model does. Compare any existing asset to the expected bytes
 and stop on a mismatch. The binary variant adds draft/resume verification.
 
+**Latest release badge policy:** recommend `latest=true` (`--latest=true`, or
+API `make_latest: "true"`) for the **highest stable version**. Set
+`latest=false` for pre-releases and older stable versions, comparing semantic
+versions rather than upload time. A pre-release also carries the pre-release
+flag. Choose this explicitly when publishing the release/draft; do not let a
+late upload of an older version move the Latest badge. This policy changes
+release metadata selection, never the prohibition on replacing assets.
+
 ### 6. Verify publication
 
 - Check that each crates.io checksum equals the SHA-256 of its attested `.crate`.
@@ -125,8 +161,10 @@ and stop on a mismatch. The binary variant adds draft/resume verification.
   builder for Python/binary variants. Validate the checksum manifest and bundle
   as evidence, not as claims that they
   themselves necessarily have individual attestations.
-- Require successful docs.rs builds. Use a bounded wait; report a queue still
-  pending at the end as **pending**, never passed.
+- Require successful docs.rs builds within a bounded wait. If still **pending**
+  at the deadline, **FAIL `verify`** with a non-zero result; log the pending
+  state, never a pass or neutral completion. An unsuccessful build also fails.
+  This is stricter than the earlier standard, which only reported pending.
 - In the PyPI variant, require each published wheel/sdist digest to equal its
   `SHA256SUMS` entry and require PEP 740 attestations to be present for each
   file; validate their expected publisher identity as part of verification.
@@ -154,6 +192,44 @@ and stop on a mismatch. The binary variant adds draft/resume verification.
   with version comments; checkout has `persist-credentials: false`.
 - Install tools at exact versions with `--locked` where supported; Python tools
   use pinned, hash-locked requirements. Do not use `[skip ci]`.
+
+### Independent tag-push guards and immutable checkouts
+
+Every privileged release job must require the gate's publishing decision **and**
+this independent event condition in its **own job-level `if`**:
+
+```yaml
+if: >-
+  needs.gate.outputs.publish == 'true' &&
+  github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+```
+
+Apply it to `attest`, `publish` (or `publish-crates`), `publish-pypi`,
+`github-release`, and `verify` whenever it holds tokens; use it for `verify`
+as the default too. The event terms must be written independently, not taken
+from a gate output. The gate executes repository code that a same-repository
+PR can edit. A forged `publish=true` must not activate privileged jobs on a PR:
+`attest` has OIDC/attestation write access and `github-release` has write access
+without a registry environment to provide an approval barrier.
+
+Python/binary reusable builds still run on PR/manual dry runs. Their nested
+signing jobs must enforce the same independent tag-push condition themselves,
+alongside the publishing decision; a caller-provided `attest` boolean alone
+is not authority to sign. Dry-run build jobs never sign or publish.
+
+Every privileged job that checks out source uses the immutable event SHA:
+
+```yaml
+with:
+  ref: ${{ github.sha }}
+  persist-credentials: false
+```
+
+Never take the checkout ref from `needs.gate.outputs.commit` or another job's
+outputs, nor from a mutable branch/tag. The gate's commit is **evidence to
+compare** against the event/check-out SHA and remote tag commit, **not checkout
+authority**; fail on any mismatch. Apply this to checkouts within reusable
+signers too. Jobs such as `publish-pypi` that need no source retain no checkout.
 
 ### Publish path (dry run) — every repository
 
@@ -271,7 +347,10 @@ permissions are:
 | `verify` | Verify publication | `[gate, github-release]` | `contents: read` only | — |
 
 Publishing jobs, `github-release` and `verify` require
-`needs.gate.outputs.publish == 'true'`. The dry-run job instead requires
+`needs.gate.outputs.publish == 'true'` and must each repeat the independent
+tag-push guard in their own `if` (including `publish-crates`). The reusable
+builder's nested signer also checks the event independently.
+The dry-run job instead requires
 `publish != 'true'` and never enters either environment. Each registry has
 its own **owner-required approval**, restricted to **`v*` tags only**, with
 **no administrator bypass**: `crates-io` first, then `pypi`. A crate failure
@@ -351,7 +430,8 @@ SLSA assurance, not a declaration that TelemetryWorks has achieved Build L3.
   builds and qualifies each target through a read-only `build-binaries-core.yml`,
   packages release crates and binaries, generates SBOMs and one `SHA256SUMS`,
   and signs its own verified output in a nested **Checksums and attestations**
-  job only on a `v*` tag push. The caller cannot supply arbitrary signing inputs.
+  job only on a `v*` tag push, with its own independent event guard. The caller
+  cannot supply arbitrary signing inputs. Its source checkout is `github.sha`.
 - There is **no top-level `attest` job** in this variant. `build` retains
   `needs: gate` and grants `contents: read`, `id-token: write` and
   `attestations: write` to the reusable workflow; only its nested signer uses
@@ -377,6 +457,14 @@ SLSA assurance, not a declaration that TelemetryWorks has achieved Build L3.
 
 ## Lessons from the rollout
 
+- **Types pilot #20:** [merged adoption PR](https://github.com/TelemetryWorks/irig106-types/pull/20)
+  and [successful PR dry run](https://github.com/TelemetryWorks/irig106-types/actions/runs/45046716550)
+  established adoption. Review confirmed two requirements: upload attestations
+  as an immutable sidecar instead of replacing the payload, and independently
+  guard privileged jobs against non-tag events with immutable checkouts. The
+  pilot used local annotation checks and `latest=false`; this amendment adds
+  remote API annotation checks, a fail-on-pending docs.rs deadline, and an
+  explicit Latest policy as requirements, not claims about the pilot code.
 - **CI lookup:** the workflow-runs API's `status=success` filter can miss green
   CI. Read all pages of runs for the tagged SHA (`?head_sha=SHA&per_page=100`)
   and identify the intended CI workflow with `conclusion == 'success'`.
@@ -397,9 +485,12 @@ SLSA assurance, not a declaration that TelemetryWorks has achieved Build L3.
 
 ## Rollout tracker
 
-Snapshot: **2026-11-22**, read-only main trees/manifests/workflows, GitHub release
-lists, crates.io and PyPI APIs. No settings changed, adoption dry runs executed,
-or credentials inspected. `trustpub_only` below is the literal
+Snapshot: **2026-11-22**, with the types row updated to the merged pilot #20
+commit and its passing PR dry run; other rows retain the original inspection.
+Evidence: read-only main trees/manifests/workflows, GitHub release
+lists, crates.io and PyPI APIs. This documentation update changed no settings,
+executed no adoption dry runs and inspected no credentials. `trustpub_only`
+below is the literal
 **`crate.trustpub_only`** field from crates.io, fetched with a User-Agent.
 An unpublished crate has no such setting; N/A is not `false`. Matching registry
 names alone do not establish ownership: unrelated projects are excluded.
@@ -409,16 +500,19 @@ PyPI's `pelorus` belongs to an unrelated project.
 Workflow cells list all `.github/workflows` basenames at the linked commit;
 `—` means no workflows. **Pending adoption PR** means a PR is needed, not that
 one is already open (none of the inspected open PRs implements this standard).
-**Adopted** requires a merged adoption and successful PR dry run; no repository
-has that evidence yet. **Not applicable (publishes nothing)** means no software
-package/binary release in scope now, not permanent exemption from future releases.
+**Adopted** requires a merged adoption and successful PR dry run;
+`irig106-types` now has that evidence. Later standard amendments still need
+repository review; Adopted does not assert that every new requirement is
+already implemented or that a real release has run.
+**Not applicable (publishes nothing)** means no software package/binary release
+in scope now, not permanent exemption from future releases.
 
 | Repository | crates.io / `crate.trustpub_only` (`only`) | PyPI | Current workflows | Adoption |
 | --- | --- | --- | --- | --- |
 | [.github](https://github.com/TelemetryWorks/.github/tree/686469bc668502637723dd13259cf5b9313bb7f0) | — | — | — | **Not applicable (publishes nothing)** |
 | [spatial-typestate](https://github.com/TelemetryWorks/spatial-typestate/tree/4011671426926f3ea31fe5573a73876c613e0c5e) | `spatial-typestate` 0.1.0; 0.0.1 placeholder; only=true | `spatial-typestate` 0.1.0; Rust binding crate is internal (publish=false) | `candidate-qualification.yml`, `ci.yml`, `codeql.yml`, **RETIRED `publish-0.1.0.yml`**, `python.yml`, `scorecard.yml`, `sonar-analysis.yml`, `trusted-publishing.yml`, `zizmor.yml` | **Pending adoption PR**; Rust-first PyPI variant; preserve qualifications; retired route prohibited |
 | [irig106-validator](https://github.com/TelemetryWorks/irig106-validator/tree/031024e2e3715459c508fed7ac2537ecd651ece3) | No crate | None found | — | **Not applicable (publishes nothing)** |
-| [irig106-types](https://github.com/TelemetryWorks/irig106-types/tree/bd8cd4115e1b7ec89edbcf7de03e5a4406d6fd2e) | `irig106-types` 0.1.0; 0.0.1 placeholder; only=true | None found | `ci.yml`, `scorecard.yml`, `trusted-publishing.yml`, `zizmor.yml` | **Pending adoption PR**; older shape, not adopted |
+| [irig106-types](https://github.com/TelemetryWorks/irig106-types/tree/332f8923c20c3214e5477b8a118a485cfe422289) | `irig106-types` 0.1.0; 0.0.1 placeholder; only=true | None found | `ci.yml`, `scorecard.yml`, `trusted-publishing.yml`, `zizmor.yml` | **Adopted**: [pilot #20](https://github.com/TelemetryWorks/irig106-types/pull/20), passing PR dry run; subsequent amendments apply |
 | [irig106-core](https://github.com/TelemetryWorks/irig106-core/tree/38ac0700d40152d96642cb11176f2e0cdd347c53) | `irig106-core` 0.0.1 placeholder; only=true | None found | — | **Adopt before first real release** |
 | [irig106-time](https://github.com/TelemetryWorks/irig106-time/tree/96745982a3860ac3aa9102da502a53272c25cb46) | `irig106-time` through 0.7.0 (prototype); only=true. `irig106-time-cli` 0.0.1 placeholder; only=true; main CLI still publish=false | None found | `ci.yml` | **Adopt before first real release**; S20 rebuilt family preparation |
 | [irig106-decode](https://github.com/TelemetryWorks/irig106-decode/tree/3afa7a4750eae0f513688c3fc0e71ade8df42b6a) | `irig106-decode` 0.0.1 placeholder; **only=false** (owner turning it on; blocker until verified true) | None found | — | **Adopt before first real release** |
