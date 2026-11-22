@@ -16,9 +16,11 @@ PyPI uses the same workflow filename and environment `pypi`.
 
 ## The pipeline
 
-The crate-only pipeline has these six jobs, with exactly these ids and names.
-Each job explicitly grants `contents: read` unless the table replaces it with
-`contents: write`; no other permissions are granted beyond those listed.
+The Rust-only release path has these six jobs, with exactly these ids and
+names, plus the dry-run-only `publish-path-check` required for every repository.
+Each base job explicitly grants `contents: read` unless the table replaces it
+with `contents: write`; no other permissions are granted beyond those listed.
+The PyPI variant below defines its own job ids, dependencies and permissions.
 
 | # | Job id | Display name | Runs on | Permissions |
 | --- | --- | --- | --- | --- |
@@ -60,13 +62,16 @@ lockstep-workspace requirements below when defining that list.
 Run `cargo package --locked` for each release crate in dependency order,
 including the build from its packaged source. Generate a CycloneDX SBOM with
 an exact, pinned `cargo-cyclonedx` version installed using `--locked`.
-Create `SHA256SUMS` covering each `.crate` and the SBOM. Upload one logical
-release artifact named `release-<version>` containing those files.
+Record the exact Rust toolchain as the `build` output `rust-version`; both
+publish and publish-path checks must install and check that same version,
+not resolve a newer stable after an approval delay. Create `SHA256SUMS`
+covering each `.crate` and the SBOM. Upload one logical release artifact named
+`release-<version>` containing those files.
 
 All additional qualification, package audits and candidate-install tests
 belong here and must also execute on the PR dry run. The Python variant builds
-its wheels and sdist here too; publishing jobs never build them. The binary
-variant uses a reusable builder as described below.
+its wheels (and sdist if shipped) here too; publishing jobs never build them.
+The binary variant uses a reusable builder as described below.
 
 ### 3. Checksums and attestations
 
@@ -90,11 +95,14 @@ Do not run a compiling publish dry run in this job.
 
 After comparison, obtain the short-lived credential with the full-SHA-pinned
 `rust-lang/crates-io-auth-action`. Run `cargo publish --locked --no-verify`
-in dependency order, exposing `CARGO_REGISTRY_TOKEN` from that action on the
-publish step alone. This is an ephemeral OIDC credential, never a stored token.
-Skip versions already on crates.io; confirm their checksum matches the expected
-artifact and fail on a mismatch. This permits controlled recovery after a
-partial upload without attempting to replace any published version.
+in dependency order (dependency waves for a multi-crate workspace), waiting
+for each wave to become available before its dependants. Expose
+`CARGO_REGISTRY_TOKEN` from that action on the publish step alone. This is an ephemeral OIDC credential, never a stored token.
+For every new or already-published version, download the served `.crate` and
+compare it **byte for byte** with the attested file, also checking the registry
+checksum. Skip uploading existing versions, but never skip their comparisons;
+a mismatch fails the job before any PyPI upload. This permits controlled
+recovery after a partial upload without replacing a published version.
 
 ### 5. GitHub release
 
@@ -102,18 +110,24 @@ Create `vX.Y.Z` using `--verify-tag` and the committed
 `docs/releases/vX.Y.Z.md` as the release body, with its first heading as the
 title. Attach the `.crate` files, SBOM, `SHA256SUMS` and provenance bundle
 (and variant-specific files). A retry may upload missing assets only;
-**never replace an asset**. Compare any existing asset to the expected bytes
+**never replace an asset**: do not use `gh release upload --clobber`, even
+though the Praevis model does. Compare any existing asset to the expected bytes
 and stop on a mismatch. The binary variant adds draft/resume verification.
 
 ### 6. Verify publication
 
 - Check that each crates.io checksum equals the SHA-256 of its attested `.crate`.
 - Run `gh attestation verify` for each attested attached file, constraining the
-  expected repository and `trusted-publishing.yml` signer workflow. Validate
-  the checksum manifest and bundle as evidence, not as claims that they
+  expected repository, release tag (`--source-ref refs/tags/vX.Y.Z`) and actual
+  signer workflow: `trusted-publishing.yml` for the base pipeline, the reusable
+  builder for Python/binary variants. Validate the checksum manifest and bundle
+  as evidence, not as claims that they
   themselves necessarily have individual attestations.
 - Require successful docs.rs builds. Use a bounded wait; report a queue still
   pending at the end as **pending**, never passed.
+- In the PyPI variant, require each published wheel/sdist digest to equal its
+  `SHA256SUMS` entry and require PEP 740 attestations to be present for each
+  file; validate their expected publisher identity as part of verification.
 - For published binary crates, use a clean `cargo install --locked` of the
   exact version into an empty root and check the executable's version.
   For binary-only distributions without a registry crate, verify and smoke-test
@@ -123,11 +137,14 @@ and stop on a mismatch. The binary variant adds draft/resume verification.
 ## Common settings
 
 - `push` tags `['v*']` invokes publishing. `pull_request`, filtered to workflow
-  and release-script changes, and `workflow_dispatch` invoke only the gate and
-  build dry run. Neither dry-run route signs, deploys or publishes.
+  and release-script changes, and `workflow_dispatch` invoke the gate, build
+  and **Publish path (dry run)** job. Neither dry-run route signs, deploys
+  or publishes, including a manual dispatch from a tag.
 - Top-level permission is `contents: read`. Grant additional permissions only
   to the individual job in the table; explicit job permissions include the
   required read access, since unspecified permissions become unavailable.
+  Exception: `publish-pypi` explicitly grants **only** `id-token: write`; it
+  downloads the same-run artifact without checking out source.
 - Use `concurrency.group: trusted-publishing-${{ github.ref }}`. Set
   `cancel-in-progress` true only for PRs; never cancel a tag run for concurrency.
 - Use `ubuntu-24.04` runners for the base jobs. Platform matrices belong inside
@@ -135,6 +152,24 @@ and stop on a mismatch. The binary variant adds draft/resume verification.
   with version comments; checkout has `persist-credentials: false`.
 - Install tools at exact versions with `--locked` where supported; Python tools
   use pinned, hash-locked requirements. Do not use `[skip ci]`.
+
+### Publish path (dry run) — every repository
+
+Rust-only, Python and binary repositories all add job `publish-path-check`,
+display name **Publish path (dry run)**, with `needs: [gate, build]` and
+`if: needs.gate.outputs.publish != 'true'`. It runs for `pull_request` and
+`workflow_dispatch`, with **only `contents: read`**, no environment and no
+OIDC token. It never invokes registry authentication or publication.
+
+Download the bundle and strictly validate every `SHA256SUMS` entry. Install
+the exact `build.outputs.rust-version`, verify that `rustc` reports that
+version, and repackage with `cargo package --locked --no-verify`. Compare
+every candidate `.crate` byte for byte with the frozen build output that the
+tag run will attest. Dry-run artifacts themselves are not signed under this
+standard; a comparison must not be reported as successful signature verification.
+For binary-only repositories, validate the bundle and toolchain, and record
+crate comparison as not applicable. These checks exercise the privileged
+publish path without entering an approval environment or obtaining credentials.
 
 ### First-upload bootstrap exception
 
@@ -199,28 +234,70 @@ neither changes them nor certifies their present configuration.
 
 ## Repositories that also publish Python wheels
 
-**Owner decision: ONE `v*` tag releases Rust and Python together. There are no
-dual tags.** Crate, Python project, native binding and committed notes must
-agree on the release version. Neither registry upload authorizes a second tag.
+**Spatial-typestate adopts this variant.** The owner direction of 2026-11-22
+uses the Praevis model: [trusted-publishing.yml](https://github.com/Praevis-Quant/praevis-thetadata/blob/830109709acc983f3704f07fae1424ab8d088b27/.github/workflows/trusted-publishing.yml),
+[build-release.yml](https://github.com/Praevis-Quant/praevis-thetadata/blob/830109709acc983f3704f07fae1424ab8d088b27/.github/workflows/build-release.yml)
+and [releasing instructions](https://github.com/Praevis-Quant/praevis-thetadata/blob/830109709acc983f3704f07fae1424ab8d088b27/docs/releasing.md),
+read in full. Keep TelemetryWorks' `gate` id, dated changelog/committed-notes
+rules, unsigned dry runs and never-replace-assets rule where that model differs.
 
-Keep the six base job ids and display names. Add job `publish-pypi`, display
-name **Publish to PyPI**, with `needs: [gate, build, attest, publish]`, the same
-publishing-tag condition, environment `pypi`, and only `contents: read` plus
-`id-token: write`. The only dependency extension to the base release sequence
-is `github-release` needing `[gate, publish, publish-pypi]` so assets are not
-released before both registries finish. `verify` keeps `[gate, github-release]`
-and verifies both registries' actual files.
+**Exactly ONE `v*` tag releases Rust and Python. There are no dual tags.**
+The gate checks that the tag, workspace version, Python package version and
+native-binding version agree. A crate upload never authorizes a second tag.
 
-Build and qualify wheels and sdist in `build`, add them to the same
-`release-<version>` artifact and `SHA256SUMS`, and sign their GitHub provenance
-before upload. In `publish-pypi`, recheck checksums and stage only those
-prebuilt files. Use full-SHA-pinned `pypa/gh-action-pypi-publish` with
-`attestations: true` for **PEP 740 per-file attestations**. Nothing compiles
-there. Keep the registry identity at `trusted-publishing.yml` / `pypi`.
-Validate PyPI file hashes and per-file attestations, then test clean installed
-packages in the intended runtime/platform matrix. Preserve source-graph SBOM
-scope limits; it is not a claim of complete native binary dependency coverage.
-Native wheels also require the reusable-builder signing boundary below.
+**RUST IS PUBLISHED FIRST.** The combined variant uses a reusable build/signing
+workflow, so it has no separate top-level `attest` job. Its job sequence and
+permissions are:
+
+| Job id | Display name | `needs` | Permissions | Environment |
+| --- | --- | --- | --- | --- |
+| `gate` | Release gate | — | `contents: read`, `actions: read` | — |
+| `build` | Build | `gate` | `contents: read`, `id-token: write`, `attestations: write` delegated to the reusable builder; only its nested signer uses writes | — |
+| `publish-path-check` | Publish path (dry run) | `[gate, build]` | `contents: read` only | — |
+| `publish-crates` | Publish to crates.io | `[gate, build]` | `contents: read`, `id-token: write` | `crates-io` |
+| `publish-pypi` | Publish to PyPI | `[gate, build, publish-crates]` | **`id-token: write` ONLY** | `pypi` |
+| `github-release` | GitHub release | `[gate, publish-crates, publish-pypi]` | `contents: write` only | — |
+| `verify` | Verify publication | `[gate, github-release]` | `contents: read` only | — |
+
+Publishing jobs, `github-release` and `verify` require
+`needs.gate.outputs.publish == 'true'`. The dry-run job instead requires
+`publish != 'true'` and never enters either environment. Each registry has
+its own **owner-required approval**, restricted to **`v*` tags only**, with
+**no administrator bypass**: `crates-io` first, then `pypi`. A crate failure
+stops the release before anything reaches PyPI. A PyPI rejection after Rust
+publication leaves the crates published; it does not roll them back.
+
+Build and qualify wheels in `build`, using reusable
+`.github/workflows/build-release.yml` for multi-platform wheels. Build an
+sdist there **if the repository ships one** (spatial-typestate does). Package
+all Rust crates and Python files into the same `release-<version>` bundle,
+include them in `SHA256SUMS`, and attest them inside the reusable builder
+before any registry approval. Preserve the isolated-builder boundary from
+the binary variant. No publishing job compiles anything.
+
+`publish-crates` applies the Rust publishing checks above using the exact
+build toolchain: checksum the bundle, repackage without compiling, and compare
+to the attested crates before upload. Publish in dependency order/waves,
+skip already-published versions, and compare **every served `.crate` byte for
+byte** with its attested counterpart before completing. Only then can
+`publish-pypi` request its environment approval.
+
+`publish-pypi` rechecks `SHA256SUMS`, stages **only the prebuilt, checksummed
+wheels**, plus the prebuilt checksummed sdist when shipped, and uploads using
+full-SHA-pinned `pypa/gh-action-pypi-publish` with **`attestations: true`**
+(PEP 740 per-file attestations) and **`skip-existing: true`**. It has no source
+checkout, no `contents`/`attestations` permission, no stored token and no
+compilation. The Trusted Publisher identity remains `trusted-publishing.yml`
+with environment `pypi`. Skipping an existing file is not proof its bytes match.
+
+`github-release` waits for **both** `publish-crates` and `publish-pypi`, takes
+its notes from the committed file, and uploads **only missing assets**.
+Existing assets are compared and never replaced; Praevis' `--clobber` behavior
+is explicitly not adopted. `verify` follows it and additionally requires
+published PyPI file digests to match `SHA256SUMS` and PEP 740 attestations to
+be present for every published file. Validate expected publisher identity and
+retain clean installed-package checks for the intended runtime/platform matrix.
+Source-graph SBOMs do not establish complete native dependency coverage.
 
 ### Spatial-typestate: observed shape, not adopted yet
 
@@ -237,7 +314,7 @@ already uses pinned `pypa/gh-action-pypi-publish` with per-file PEP 740
 attestations. Publishing is restricted to the original run (`run_attempt == 1`),
 and `release-assets` is a third, non-OIDC `crates-io` approval.
 
-This is not the new six-job pipeline: the current crate publish job compiles,
+This is not the new PyPI variant: the current crate publish job compiles,
 attestations happen in publishing jobs, the artifact is `release-package`,
 and there is no PR dry-run trigger. Migration must preserve its qualification
 and file-selection controls while moving compilation out of privileged jobs
@@ -265,8 +342,10 @@ SLSA assurance, not a declaration that TelemetryWorks has achieved Build L3.
   PR/manual runs build everything but never sign. `publish` needs `[gate, build]`
   instead of `[gate, build, attest]`; other base edges stay the same.
 - All building and signing finish before the owner's registry approval. For
-  native wheels combine this boundary with the Python variant: `publish-pypi`
-  needs `[gate, build, publish]`, with signing completed inside `build`.
+  native wheels use the Python variant's reusable `build-release.yml` and
+  `publish-crates` id; `publish-pypi` needs `[gate, build, publish-crates]`.
+  Signing is completed inside `build`. Every variant includes the read-only
+  `publish-path-check` on PR/manual dry runs.
 - `github-release` first creates or resumes a draft. Verify its tag, title,
   exact committed body and draft state, upload all assets, check each name,
   size and digest, publish, and check again. Never modify a published release.
@@ -320,7 +399,7 @@ package/binary release in scope now, not permanent exemption from future release
 | Repository | crates.io / `crate.trustpub_only` (`only`) | PyPI | Current workflows | Adoption |
 | --- | --- | --- | --- | --- |
 | [.github](https://github.com/TelemetryWorks/.github/tree/686469bc668502637723dd13259cf5b9313bb7f0) | — | — | — | **Not applicable (publishes nothing)** |
-| [spatial-typestate](https://github.com/TelemetryWorks/spatial-typestate/tree/4011671426926f3ea31fe5573a73876c613e0c5e) | `spatial-typestate` 0.1.0; 0.0.1 placeholder; only=true | `spatial-typestate` 0.1.0; Rust binding crate is internal (publish=false) | `candidate-qualification.yml`, `ci.yml`, `codeql.yml`, **RETIRED `publish-0.1.0.yml`**, `python.yml`, `scorecard.yml`, `sonar-analysis.yml`, `trusted-publishing.yml`, `zizmor.yml` | **Pending adoption PR**; preserve Python qualifications; retired route prohibited |
+| [spatial-typestate](https://github.com/TelemetryWorks/spatial-typestate/tree/4011671426926f3ea31fe5573a73876c613e0c5e) | `spatial-typestate` 0.1.0; 0.0.1 placeholder; only=true | `spatial-typestate` 0.1.0; Rust binding crate is internal (publish=false) | `candidate-qualification.yml`, `ci.yml`, `codeql.yml`, **RETIRED `publish-0.1.0.yml`**, `python.yml`, `scorecard.yml`, `sonar-analysis.yml`, `trusted-publishing.yml`, `zizmor.yml` | **Pending adoption PR**; Rust-first PyPI variant; preserve qualifications; retired route prohibited |
 | [irig106-validator](https://github.com/TelemetryWorks/irig106-validator/tree/031024e2e3715459c508fed7ac2537ecd651ece3) | No crate | None found | — | **Not applicable (publishes nothing)** |
 | [irig106-types](https://github.com/TelemetryWorks/irig106-types/tree/bd8cd4115e1b7ec89edbcf7de03e5a4406d6fd2e) | `irig106-types` 0.1.0; 0.0.1 placeholder; only=true | None found | `ci.yml`, `scorecard.yml`, `trusted-publishing.yml`, `zizmor.yml` | **Pending adoption PR**; older shape, not adopted |
 | [irig106-core](https://github.com/TelemetryWorks/irig106-core/tree/38ac0700d40152d96642cb11176f2e0cdd347c53) | `irig106-core` 0.0.1 placeholder; only=true | None found | — | **Adopt before first real release** |
