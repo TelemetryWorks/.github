@@ -204,13 +204,22 @@ if: >-
   github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
 ```
 
-Apply it to `attest`, `publish` (or `publish-crates`), `publish-pypi`,
-`github-release`, and `verify` whenever it holds tokens; use it for `verify`
-as the default too. The event terms must be written independently, not taken
-from a gate output. The gate executes repository code that a same-repository
-PR can edit. A forged `publish=true` must not activate privileged jobs on a PR:
-`attest` has OIDC/attestation write access and `github-release` has write access
-without a registry environment to provide an approval barrier.
+Apply it unconditionally to `attest`, `publish`/`publish-crates`,
+`publish-pypi` and `github-release`; apply it to `verify` as well
+(mandatory whenever it holds tokens). The event terms must be written
+independently, not taken from a gate output.
+
+This guard is **defense in depth, not a hard barrier**. It protects against a
+forged gate output while the guard is intact, but a same-repository PR runs
+its own copy of the workflow and could delete the guards as well as edit the
+gate code. Hard barriers live outside that PR-editable workflow: the
+`crates-io`/`pypi` environments' server-enforced `v*`-tag deployment policy,
+verifiers requiring `--source-ref refs/tags/v...`, and required review of
+workflow changes. These controls must be enforced independently of the PR.
+`attest` and `github-release` have **no environment barrier** despite their
+OIDC/attestation-write and release-write permissions. The residual risk is
+limited because same-repository PR authors already have repository write
+access; the guard alone does not remove it.
 
 Python/binary reusable builds still run on PR/manual dry runs. Their nested
 signing jobs must enforce the same independent tag-push condition themselves,
