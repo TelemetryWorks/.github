@@ -93,8 +93,10 @@ archive with `cargo package --locked --no-verify`, then `cmp` it against the
 attested `.crate`. Compilation and qualification already happened in `build`.
 Do not run a compiling publish dry run in this job.
 
-After comparison, obtain the short-lived credential with the full-SHA-pinned
-`rust-lang/crates-io-auth-action`. Run `cargo publish --locked --no-verify`
+After comparison, obtain a **fresh short-lived token per publish wave** with
+a separate invocation of the full-SHA-pinned `rust-lang/crates-io-auth-action`
+for each wave; never reuse an earlier wave's token. Run
+`cargo publish --locked --no-verify`
 in dependency order (dependency waves for a multi-crate workspace), waiting
 for each wave to become available before its dependants. Expose
 `CARGO_REGISTRY_TOKEN` from that action on the publish step alone. This is an ephemeral OIDC credential, never a stored token.
@@ -167,9 +169,16 @@ version, and repackage with `cargo package --locked --no-verify`. Compare
 every candidate `.crate` byte for byte with the frozen build output that the
 tag run will attest. Dry-run artifacts themselves are not signed under this
 standard; a comparison must not be reported as successful signature verification.
-For binary-only repositories, validate the bundle and toolchain, and record
-crate comparison as not applicable. These checks exercise the privileged
-publish path without entering an approval environment or obtaining credentials.
+Also run the **known-good registry download check**: download an
+already-published version of a crate (a placeholder is fine), and compare it
+**byte for byte** with a pinned, trusted expected `.crate` fixture. Record the
+known-good crate/version and fixture digest; do not compare two fresh downloads
+to each other. This exercises the registry download and comparison path
+without publishing, even before this repository has a real release.
+For binary-only repositories, candidate crate comparison is not applicable,
+but the known-good download check still runs. These checks exercise the
+privileged publish path without entering an approval environment or obtaining
+credentials.
 
 ### First-upload bootstrap exception
 
@@ -183,9 +192,11 @@ states:
 > Trusted-Publishing-only mode before any subsequent upload. This exception
 > does not permit token-based updates to an existing crate.
 
-The coordinator/owner may perform only the brand-new name's **first upload**,
-a name-placeholder `0.0.1` publish, with that one-time, crate-scoped,
-`publish-new` token expiring in one day. Revoke it immediately afterward,
+The exception is for **a brand-new crate's FIRST upload only**, as the policy
+quoted above states. The coordinator/owner usually makes a `0.0.1` name
+placeholder upload; that version is usual practice, not a restriction of the
+exception. Use the one-time, crate-scoped `publish-new` token expiring in one
+day. Revoke it immediately afterward,
 register the Trusted Publisher, and enable crates.io **Trusted Publishing only**
 before any later upload. CI never performs the bootstrap and never stores a
 token. An already-published placeholder cannot use this exception again.
@@ -266,6 +277,12 @@ its own **owner-required approval**, restricted to **`v*` tags only**, with
 **no administrator bypass**: `crates-io` first, then `pypi`. A crate failure
 stops the release before anything reaches PyPI. A PyPI rejection after Rust
 publication leaves the crates published; it does not roll them back.
+
+**Coordinator decision 2026-11-22 (owner may override): wheels plus an optional
+prebuilt sdist; the praevis model ships wheels only.** This preserves
+spatial-typestate's existing policy and published 0.1.0 shape. An sdist must be
+built in `build`, included in `SHA256SUMS`, attested with PEP 740 at publication,
+and uploaded only from that prebuilt release bundle, just like the wheels.
 
 Build and qualify wheels in `build`, using reusable
 `.github/workflows/build-release.yml` for multi-platform wheels. Build an
